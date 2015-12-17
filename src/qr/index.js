@@ -41,25 +41,14 @@ function generateUUID() {
     });
 }
 
-function createQRCanvas(name, callback) {
+function getQRDataURI(text, callback) {
+    var elemName = 'qrcode-' + generateUUID();
+    
     var div = document.createElement('div');
-    div.id = name;
+    div.id = elemName;
     div.style.display = 'none';
 
     document.body.appendChild(div);
-}
-
-function deleteQRCanvas(name, callback) {
-    var qrCodeCanvas = document.getElementById(name)
-    if (qrCodeCanvas) {
-        qrCodeCanvas.parentElement.removeChild(qrCodeCanvas);
-    }
-}
-
-
-function getQRDataURI(text, callback) {
-    var elemName = 'qrcode-'
-    createQRCanvas(elemName)
 
     var qrGenerator = new QRCode(elemName);
 
@@ -69,7 +58,7 @@ function getQRDataURI(text, callback) {
         .getElementsByTagName("canvas")[0]
         .toDataURL("image/png");
 
-    deleteQRCanvas(elemName);
+    document.body.removeChild(div);
 
     return qrCodeDataURI
 }
@@ -115,16 +104,5 @@ function makePDF(qr_data) {
         }
     }
 
-    var pdfURI = doc.output('datauristring');
-    document.getElementById("preview").src = pdfURI;
+    return doc.output('datauristring');
 }
-
-qr_data = []
-for (var i = 0; i < 70; i++) {
-  qr_data.push({
-    url: "https://www.google.com",
-    title: "test title"
-  });
-}
-
-makePDF(qr_data);
