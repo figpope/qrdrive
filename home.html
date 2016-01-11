@@ -165,11 +165,16 @@
       return qrCodeDataURI
     }
 
+    var PAGE_MARGINS = {
+      width: 72, //pts
+      height: 72, //pts
+    };
+
     function makePDF(qr_data) {
       var doc = new jsPDF("portrait", "pt", "letter");
 
-      var pageWidth = doc.internal.pageSize.width / doc.internal.scaleFactor;
-      var pageHeight = doc.internal.pageSize.height / doc.internal.scaleFactor;
+      var pageWidth = doc.internal.pageSize.width / doc.internal.scaleFactor - PAGE_MARGINS.width;
+      var pageHeight = doc.internal.pageSize.height / doc.internal.scaleFactor - PAGE_MARGINS.height;
 
       var qrDim = getQRTileDimensions();
       var titleHeight = _.max(_.map(qr_data, function(qr) { return getTextHeight(doc, qr.title, qrDim.totalWidth); }));
