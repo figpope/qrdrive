@@ -237,9 +237,8 @@
       $("#message").replaceWith(SPINNER_HTML);
       $("#download").prop("disabled", true);
 
-      gapi.load('auth', {'callback': onAuthApiLoad});
       gapi.load('picker', onPickerApiLoad);
-      gapi.client.load('drive', 'v2', onPickerApiLoad);
+
     }
 
     function onAuthApiLoad() {
@@ -247,14 +246,19 @@
         {
           'client_id': clientId,
           'scope': scope,
-          'immediate': false
+          'immediate': false,
+          'authuser': -1
         },
         handleAuthResult);
     }
 
     function onPickerApiLoad() {
       pickerApiLoaded = true;
-      createPicker();
+      gapi.client.load('drive', 'v2', onDriveApiLoad);
+    }
+    
+    function onDriveApiLoad() {
+      gapi.load('auth', {'callback': onAuthApiLoad});
     }
 
     function handleAuthResult(authResult) {
