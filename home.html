@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>QR Drive</title>
+
+  <!-- load FA icons -->
+  <link href="//cdnjs.cloudflare.com/ajax/libs/font-awesome/4.2.0/css/font-awesome.min.css" rel="stylesheet" type="text/css" />
+
+  <!-- load MUI -->
+  <link href="//cdn.muicss.com/mui-0.2.9/css/mui.min.css" rel="stylesheet" type="text/css" />
+  <script src="//cdn.muicss.com/mui-0.2.9/js/mui.min.js"></script>
+
+  <style>
+    .centered {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      /* bring your own prefixes */
+      transform: translate(-50%, -50%);
+    }
+  </style>
+</head>
+<body>
+  <button id="download" class="mui-btn mui-btn--raised mui-btn--primary centered" onClick="loadPicker()"><span id="message">Create QR Codes</span></button>
+
+  <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
+  <script type="text/javascript" src="//apis.google.com/js/api.js"></script>
+  <script type="text/javascript" src="//apis.google.com/js/client.js"></script>
+  <script type="text/javascript" src="//davidshimjs.github.com/qrcodejs/qrcode.min.js"></script>
+  <script type="text/javascript" src="//rawgit.com/MrRio/jsPDF/v1.0.272/dist/jspdf.debug.js"></script>
+  <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/async/1.5.0/async.min.js"></script>
+  <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/lodash.js/3.10.1/lodash.min.js"></script>
+  <script type="text/javascript" src="//rawgit.com/rndme/download/master/download.min.js"></script>
+  <script type="text/javascript">
+    // -------------------------
+    // Content Elements
+    // -------------------------
+
+    var SPINNER_HTML = "<i id=\"message\" class=\"fa fa-spinner fa-spin\"></i>";
+    var MESSAGE_HTML = "<span id=\"message\">Create QR Codes</span>";
+
+    // -------------------------
+    // QR Code Generation
+    // -------------------------
+
+    var QR_CODE_LAYOUT = {
+      padding: 10,
+      qrSize: 72,
+      fontSize: 14
+    };
+
+    function getTextWidth(doc, text) {
+      return doc.getStringUnitWidth(text) * doc.internal.getFontSize() / doc.internal.scaleFactor
+    }
+
+    function splitTextPreservingWords(doc, text, maxlen) {
+      var textPieces = text.trim().split(" ");
+
+      var output = [];
+      var currentLine = "";
+      for (var i = 0; i < textPieces.length; i++) {
+        var updatedCurrentLine;
+        if (currentLine) {
+          updatedCurrentLine = currentLine + " " + textPieces[i];
+        } else {
+          updatedCurrentLine = textPieces[i];
+        }
+
+        if (getTextWidth(doc, updatedCurrentLine) < maxlen) {
+          currentLine = updatedCurrentLine
+        } else {
+          output.push(currentLine);
+          currentLine = textPieces[i];
+        }
+      }
+      output.push(currentLine);
+
+      return output
+    }
+
+    function getTextHeight(doc, text, maxlen) {
+      var splitText = splitTextPreservingWords(doc, text, maxlen);
+
+      var textHeight = doc.getTextDimensions(splitText[0]).h;
+
+      return textHeight * splitText.length;
+    }
+
+    function centeredText(doc, x_min, maxWidth, y_min, maxHeight, text) {
+      var splitText = splitTextPreservingWords(doc, text, maxWidth);
+
+      var totalTextHeight = getTextHeight(doc, text, maxWidth);
+
+      var textStartY = y_min + ((maxHeight - totalTextHeight) / 2);
+
+      var lineHeight = doc.getTextDimensions(splitText[0]).h;
+
+      var currentY = textStartY;
+      for (var i = 0; i < splitText.length; i++) {
+        var textPart = splitText[i];
+
+        var textWidth = getTextWidth(doc, textPart);
+        var textOffset = x_min + ((maxWidth - textWidth) / 2);
+
+        doc.text(textOffset, currentY, textPart);
+
+        currentY += lineHeight;
+      }
+    }
+
+    function getQRTileDimensions() {
+      return {
+        totalWidth: QR_CODE_LAYOUT.padding * 2 + QR_CODE_LAYOUT.qrSize,
+        fontSize: QR_CODE_LAYOUT.fontSize,
+        qrHeight: QR_CODE_LAYOUT.padding * 2 + QR_CODE_LAYOUT.qrSize
+      };
+    }
+
+    function drawQRCodeTile(doc, x, y, qr, title, titleHeight) {
+      var dim = getQRTileDimensions();
+
+      var totalHeight = dim.qrHeight + titleHeight;
+
+      var qr_y = y + QR_CODE_LAYOUT.padding;
+      var t_y = qr_y + dim.qrHeight;
+      var content_x = x + QR_CODE_LAYOUT.padding;
+
+      doc.rect(x, y, dim.totalWidth, totalHeight);
+      doc.addImage(qr, 'PNG', content_x, qr_y, QR_CODE_LAYOUT.qrSize, QR_CODE_LAYOUT.qrSize);
+      doc.setFontSize(dim.fontSize);
+      centeredText(doc, x, dim.totalWidth, t_y, titleHeight, title);
+    }
+
+    // Taken from http://stackoverflow.com/questions/105034/create-guid-uuid-in-javascript
+    function generateUUID() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = crypto.getRandomValues(new Uint8Array(1))[0]%16|0, v = c == 'x' ? r : (r&0x3|0x8);
+        return v.toString(16);
+      });
+    }
+
+    function getQRDataURI(text, callback) {
+      var elemName = 'qrcode-' + generateUUID();
+
+      var div = document.createElement('div');
+      div.id = elemName;
+      div.style.display = 'none';
+
+      document.body.appendChild(div);
+
+      var qrGenerator = new QRCode(elemName);
+
+      qrGenerator.makeCode(text);
+      var qrCodeDataURI = document
+        .getElementById(elemName)
+        .getElementsByTagName("canvas")[0]
+        .toDataURL("image/png");
+
+      document.body.removeChild(div);
+
+      return qrCodeDataURI
+    }
+
+    function makePDF(qr_data) {
+      var doc = new jsPDF("portrait", "pt", "letter");
+
+      var pageWidth = doc.internal.pageSize.width / doc.internal.scaleFactor;
+      var pageHeight = doc.internal.pageSize.height / doc.internal.scaleFactor;
+
+      var qrDim = getQRTileDimensions();
+      var titleHeight = _.max(_.map(qr_data, function(qr) { return getTextHeight(doc, qr.title, qrDim.totalWidth); }));
+      var totalHeight = qrDim.qrHeight + titleHeight;
+
+      var numTilesPerRow = Math.floor(pageWidth / qrDim.totalWidth);
+      var numTilesPerColumn = Math.floor(pageHeight / totalHeight);
+      var numTilesPerPage = numTilesPerRow * numTilesPerColumn;
+
+      var numPages = Math.ceil(qr_data.length / numTilesPerPage);
+
+      var edgePadding = {
+        x: (pageWidth - numTilesPerRow * qrDim.totalWidth) / 2,
+        y: (pageHeight - numTilesPerColumn * totalHeight) / 2
+      };
+
+      var i = 0;
+      for (var pagePos = 0; pagePos < numPages; pagePos++) {
+        for (var colPos = 0; colPos < numTilesPerColumn; colPos++) {
+          for (var rowPos = 0; rowPos < numTilesPerRow; rowPos++) {
+            if (i >= qr_data.length) {
+              break;
+            }
+            var qrCode = qr_data[i++];
+
+            drawQRCodeTile(
+              doc,
+              edgePadding.x + rowPos * qrDim.totalWidth,
+              edgePadding.y + colPos * totalHeight,
+              getQRDataURI(qrCode.url),
+              qrCode.title,
+              titleHeight
+            );
+          }
+        }
+        if (pagePos + 1 < numPages) {
+          doc.addPage();
+        }
+      }
+
+      return doc.output('datauristring');
+    }
+
+    // -----------------
+    // Google Drive Code
+    // -----------------
+
+    // The Browser API key obtained from the Google Developers Console.
+    var developerKey = 'AIzaSyAoZ-X2Q-HkZvgZENOlaE8cfLe_0nCGPSY';
+
+    // The Client ID obtained from the Google Developers Console. Replace with your own Client ID.
+    var clientId = "126472907741-slsldsrhdmbu7aeuumt58qm8up014cgv.apps.googleusercontent.com";
+
+    // Replace with your own App ID. (Its the first number in your Client ID)
+    var appId = "1234567890";
+
+    // Scope to use to access user's files.
+    var scope = ['https://www.googleapis.com/auth/drive'];
+
+    var pickerApiLoaded = false;
+    var oauthToken;
+
+    // Use the API Loader script to load google.picker and gapi.auth.
+    function loadPicker() {
+      $("#message").replaceWith(SPINNER_HTML);
+
+      gapi.load('auth', {'callback': onAuthApiLoad});
+      gapi.load('picker', onPickerApiLoad);
+      gapi.client.load('drive', 'v2', onPickerApiLoad);
+    }
+
+    function onAuthApiLoad() {
+      window.gapi.auth.authorize(
+        {
+          'client_id': clientId,
+          'scope': scope,
+          'immediate': false
+        },
+        handleAuthResult);
+    }
+
+    function onPickerApiLoad() {
+      pickerApiLoaded = true;
+      createPicker();
+    }
+
+    function handleAuthResult(authResult) {
+      if (authResult && !authResult.error) {
+        oauthToken = authResult.access_token;
+        createPicker();
+      }
+    }
+
+    // Create and render a Picker object for picking user Folders.
+    function createPicker() {
+      if (pickerApiLoaded && oauthToken) {
+        var view = new google.picker.DocsView(google.picker.ViewId.DOCS);
+        view.setMimeTypes("application/vnd.google-apps.folder");
+        view.setSelectFolderEnabled(true);
+        var picker = new google.picker.PickerBuilder()
+          .enableFeature(google.picker.Feature.NAV_HIDDEN)
+          .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+          .setAppId(appId)
+          .setOAuthToken(oauthToken)
+          .setDeveloperKey(developerKey)
+          .addView(view)
+          .setCallback(pickerCallback)
+          .build();
+        picker.setVisible(true);
+      }
+    }
+
+    function paginateGARequest(getRequest, callback) {
+      var retrievePageOfChildren = function(request, result) {
+        request.execute(function(resp) {
+          result = result.concat(resp.items);
+          var nextPageToken = resp.nextPageToken;
+          if (nextPageToken) {
+            request = getRequest(nextPageToken);
+            retrievePageOfChildren(request, result);
+          } else {
+            callback(null, result);
+          }
+        });
+      };
+      var initialRequest = getRequest();
+      retrievePageOfChildren(initialRequest, []);
+    }
+
+    function retrieveAllFilesInFolder(folderId, callback) {
+      paginateGARequest(function (nextPageToken) {
+        var requestOptions = {
+          'folderId': folderId
+        };
+
+        if (nextPageToken) {
+          requestOptions['pageToken'] = nextPageToken
+        }
+
+        return gapi.client.drive.children.list(requestOptions)
+      }, callback);
+    }
+
+    function retrieveFileDetails(fileId, callback) {
+      var request = gapi.client.drive.files.get({
+        'fileId': fileId
+      });
+
+      request.execute(function (fileDetails) { callback(null, fileDetails);})
+    }
+
+    function addPublicLinkPermission(fileId, callback) {
+      var body = {
+        'type': "anyone",
+        'role': "reader",
+        'withLink': true
+      };
+      var request = gapi.client.drive.permissions.insert({
+        'fileId': fileId,
+        'resource': body
+      });
+      request.execute(function (resp) { callback(null, resp); });
+    }
+
+    // A simple callback implementation.
+    function pickerCallback(data) {
+      var url = 'nothing', name = 'nothing';
+      if (data[google.picker.Response.ACTION] == google.picker.Action.PICKED) {
+        async.map(
+          _.pluck(data[google.picker.Response.DOCUMENTS], google.picker.Document.ID),
+          retrieveAllFilesInFolder,
+          function (err, children) {
+            if (err) { console.log(err); return; }
+
+            var fileIds = _.pluck(_.flatten(children), 'id');
+            async.map(
+              fileIds,
+              addPublicLinkPermission,
+              function (err, resp) {
+                if (err) { console.log(err); return; }
+
+                async.map(
+                  fileIds,
+                  retrieveFileDetails,
+                  function (err, files) {
+                    var qrCodeObjects = _.map(files, function (file) {
+                      return {
+                        'url': file.alternateLink,
+                        'title': file.title
+                      }
+                    });
+
+                    download(makePDF(qrCodeObjects), "QR Codes - " + new Date() + ".pdf", "application/pdf");
+
+                    $("#message").replaceWith(MESSAGE_HTML);
+                  }
+                )
+              }
+            );
+        });
+      }
+    }
+  </script>
+</body>
+</html>
