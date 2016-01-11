@@ -235,6 +235,7 @@
     // Use the API Loader script to load google.picker and gapi.auth.
     function loadPicker() {
       $("#message").replaceWith(SPINNER_HTML);
+      $("#download").prop("disabled", true);
 
       gapi.load('auth', {'callback': onAuthApiLoad});
       gapi.load('picker', onPickerApiLoad);
@@ -365,6 +366,7 @@
                     download(makePDF(qrCodeObjects), "QR Codes - " + new Date() + ".pdf", "application/pdf");
 
                     $("#message").replaceWith(MESSAGE_HTML);
+                    $("#download").prop("disabled", false);
                   }
                 )
               }
