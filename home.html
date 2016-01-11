@@ -256,7 +256,7 @@
       pickerApiLoaded = true;
       gapi.client.load('drive', 'v2', onDriveApiLoad);
     }
-    
+
     function onDriveApiLoad() {
       gapi.load('auth', {'callback': onAuthApiLoad});
     }
@@ -343,36 +343,42 @@
     function pickerCallback(data) {
       var url = 'nothing', name = 'nothing';
       if (data[google.picker.Response.ACTION] == google.picker.Action.PICKED) {
+        var folderIds = _.pluck(data[google.picker.Response.DOCUMENTS], google.picker.Document.ID);
+
         async.map(
-          _.pluck(data[google.picker.Response.DOCUMENTS], google.picker.Document.ID),
+          folderIds,
           retrieveAllFilesInFolder,
           function (err, children) {
             if (err) { console.log(err); return; }
 
             var fileIds = _.pluck(_.flatten(children), 'id');
-            async.map(
-              fileIds,
-              addPublicLinkPermission,
-              function (err, resp) {
+
+            async.parallel(
+              {
+                'permissions': function (callback) {
+                  async.map(fileIds, addPublicLinkPermission, callback)
+                },
+                'fileDetails': function (callback) {
+                  async.map(fileIds, retrieveFileDetails, callback)
+                },
+                'folderNames': function (callback) {
+                  async.map(folderIds, retrieveFileDetails, callback)
+                }
+              },
+              function (err, results) {
                 if (err) { console.log(err); return; }
 
-                async.map(
-                  fileIds,
-                  retrieveFileDetails,
-                  function (err, files) {
-                    var qrCodeObjects = _.map(files, function (file) {
-                      return {
-                        'url': file.alternateLink,
-                        'title': file.title
-                      }
-                    });
-
-                    download(makePDF(qrCodeObjects), "QR Codes - " + new Date() + ".pdf", "application/pdf");
-
-                    $("#message").replaceWith(MESSAGE_HTML);
-                    $("#download").prop("disabled", false);
+                var qrCodeObjects = _.map(results.fileDetails, function (file) {
+                  return {
+                    'url': file.alternateLink,
+                    'title': file.title
                   }
-                )
+                });
+
+                download(makePDF(qrCodeObjects), "QR Codes - " + results.folderNames[0].title + ".pdf", "application/pdf");
+
+                $("#message").replaceWith(MESSAGE_HTML);
+                $("#download").prop("disabled", false);
               }
             );
         });
