@@ -339,9 +339,12 @@
       request.execute(function (resp) { callback(null, resp); });
     }
 
-    // A simple callback implementation.
+    function restoreMessage() {
+      $("#message").replaceWith(MESSAGE_HTML);
+      $("#download").prop("disabled", false);
+    }
+
     function pickerCallback(data) {
-      var url = 'nothing', name = 'nothing';
       if (data[google.picker.Response.ACTION] == google.picker.Action.PICKED) {
         var folderIds = _.pluck(data[google.picker.Response.DOCUMENTS], google.picker.Document.ID);
 
@@ -377,11 +380,12 @@
 
                 download(makePDF(qrCodeObjects), "QR Codes - " + results.folderNames[0].title + ".pdf", "application/pdf");
 
-                $("#message").replaceWith(MESSAGE_HTML);
-                $("#download").prop("disabled", false);
+                restoreMessage();
               }
             );
         });
+      } else if (data[google.picker.Response.ACTION] == google.picker.Action.CANCEL) {
+        restoreMessage();
       }
     }
   </script>
